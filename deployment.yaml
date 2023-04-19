@@ -1,0 +1,102 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: quarkus-app
+  namespace: my-app
+  labels:
+    app: quarkus-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quarkus-app
+  template:
+    metadata:
+      namespace: my-app
+      labels:
+        app: quarkus-app
+    spec:
+      volumes:
+        - name: client-cert
+          secret:
+            secretName: client-cert
+            defaultMode: 420
+            optional: false
+      containers:
+        - resources: {}
+          name: quarkus-app
+          env:
+            - name: QUARKUS_OIDC_AUTH_SERVER_URL
+              value: https://sso.apps.sauaga.eastus.aroapp.io/auth/realms/quarkus
+            # - name: QUARKUS_HTTP_SSL_CERTIFICATE_FILES
+            #   value: /mnt/certificates/cert.pem
+            # - name: QUARKUS_HTTP_SSL_CERTIFICATE_KEY_FILES
+            #   value: /mnt/certificates/key.pem
+            - name: QUARKUS_OIDC_TLS_VERIFICATION 
+              value: none
+            - name: QUARKUS_OIDC_CLIENT-ID 
+              value: frontend
+            - name: QUARKUS_OIDC_CREDENTIALS_SECRET 
+              value: b96e9cd3-9798-479f-8ad7-5c1c24f4274d
+            - name: QUARKUS_OIDC_APPLICATION-TYPE 
+              value: web-app
+            - name: QUARKUS_HTTP_AUTH_PERMISSION_AUTHENTICATED_PATHS 
+              value: "/*"
+            - name: QUARKUS_HTTP_AUTH_PERMISSION_AUTHENTICATED_POLICY 
+              value: authenticated
+            - name: QUARKUS_TLS_TRUST-ALL
+              value: "true"
+            - name: QUARKUS_HTTP_AUTH_PERMISSION_PUBLIC_PATHS
+              value: "/q/dev/*"
+            - name: QUARKUS_HTTP_AUTH_PERMISSION_PUBLIC_POLICY 
+              value: permit
+            - name: KEYCLOAK_EXTRA_ARGS_PREPENDED
+              value: "--spi-login-protocol-openid-connect-legacy-logout-redirect-uri=true"
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          imagePullPolicy: Always
+          terminationMessagePolicy: File
+          image: 'quay.io/agarwasa/security-openid-connect-web-authentication-quickstart:latest'
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: quarkus-app-service
+  namespace: my-app
+  labels:
+    app: quarkus-app
+spec:
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+  selector:
+    app: quarkus-app
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    route.openshift.io/termination: edge
+  name: quarkus-app-ingress
+  namespace: my-app
+  labels:
+    app: quarkus-app
+
+spec:
+  host: quarkus-app.apps.sauaga.eastus.aroapp.io
+  to:
+    kind: Service
+    name: quarkus-app-service
+    weight: 100
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None
